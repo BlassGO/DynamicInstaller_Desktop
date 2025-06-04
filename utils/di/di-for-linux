@@ -1,0 +1,145 @@
+# Dynamic Installer Port for Linux
+# By @BlassGO
+
+# No needed
+auto_mount_partitions() { return 0 ; }
+wipe() { return 0 ; }
+
+# Adapted functions
+ui_print() { 
+    case $1 in
+        info)  shift; printf "\033[32m[INFO]\033[0m %s\n" "$*" ;;
+        warn)  shift; printf "\033[33m[WARN]\033[0m %s\n" "$*" ;;
+        error) shift; printf "\033[31m[ERROR]\033[0m %s\n" "$*" ;;
+        *)     printf "%s\n" "$*" ;;
+    esac
+}
+echo2() { 
+    case $1 in
+        info)  shift; printf "\033[32m[INFO]\033[0m %s\n" "$*" >&2 ;;
+        warn)  shift; printf "\033[33m[WARN]\033[0m %s\n" "$*" >&2 ;;
+        error) shift; printf "\033[31m[ERROR]\033[0m %s\n" "$*" >&2 ;;
+        *)     printf "%s\n" "$*" >&2 ;;
+    esac
+}
+zip_list() {
+   local f="$1" p="$2"
+   [ "${p: -1: 1}" == "/" ] && p+="*"
+   if [ -n "$p" ]; then
+      unzip -l "$f" "$p" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$f" ]; then
+      unzip -l "$f" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$installzip" ]; then
+      unzip -l "$installzip" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   fi
+}
+
+zip_list_file() {
+   local f="$1" p="$2"
+   [ "${p: -1: 1}" == "/" ] && p+="*"
+   if [ -n "$p" ]; then
+      unzip -l "$f" "$p" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) != "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$f" ]; then
+      unzip -l "$f" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) != "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$installzip" ]; then
+      unzip -l "$installzip" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) != "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   fi
+}
+
+zip_list_dir() {
+   local f="$1" p="$2"
+   [ "${p: -1: 1}" == "/" ] && p+="*"
+   if [ -n "$p" ]; then
+      unzip -l "$f" "$p" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) == "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$f" ]; then
+      unzip -l "$f" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) == "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   elif [ -n "$installzip" ]; then
+      unzip -l "$installzip" | awk '$1 ~ /^[-]+$/ {p=1; next} p && NF && substr($0, length($0)) == "/" {$1=$2=$3=""; path=substr($0, 4); if(path != "") print path}'
+   fi
+}
+getarch() {
+    local info
+    ABILONG="$ARCH"
+    case "$ABILONG" in
+        "x86_64") arch=x64; arch32=x86; is64bit=true; ABI=x86 ;;
+        "i686"|"i386") arch=x86; arch32=x86; is64bit=false; ABI=x86 ;;
+        "arm64"|"aarch64") arch=arm64; arch32=arm; is64bit=true; ABI=arm ;;
+        "arm"*"v7"*) arch=arm; arch32=arm; is64bit=false; ABI=arm ;;
+        *) arch=unknown; arch32=unknown; is64bit=false; ABI=unknown ;;
+    esac
+    
+    [ -e /proc/cpuinfo ] && {
+        PROC=$(grep -m1 "^model name" /proc/cpuinfo | cut -d: -f2- | awk '{$1=$1};1')
+        [ -z "$PROC" ] && PROC=$(grep -m1 "^Processor" /proc/cpuinfo | cut -d: -f2- | awk '{$1=$1};1')
+        case "$(grep -m1 "^vendor_id" /proc/cpuinfo || grep -m1 "^model name" /proc/cpuinfo)" in
+            *Intel*) chipname=intel ;;
+            *AMD*) chipname=amd ;;
+            *ARM*) chipname=arm ;;
+            *) chipname=unknown ;;
+        esac
+    }
+    
+    free_root=$(getfree /)
+    
+    echo2 "------------Device INFO------------"
+    for info in BOOTMODE ARCH ABI ABILONG PROC arch arch32 is64bit chipname free_root; do
+        [ -n "${!info}" ] && echo2 "$info=${!info}"
+    done
+    echo2 "------------Setup INFO------------"
+    for info in CUSTOM_SETUP PKG_MANAGER TMP di_version main_version; do
+        [ -n "${!info}" ] && echo2 "$info=${!info}"
+    done
+    echo2 "----------------------------------"
+}
+
+run_jar() {
+    local java file
+    [ -z "$dalvik_logging" ] && local dalvik_logging=false
+    [ -z "$dalvik_memory" ] && local dalvik_memory=800m
+    if ! command -v java >/dev/null 2>&1; then
+       echo2 "--------JAVA LOGGING--------"
+       echo2 "Unable to find java!"
+       echo2 "----------------------------"
+       echo2 "CANT LOAD JAVA" && return 1
+    fi
+    file="$1"
+    if [ ! -f "$file" ]; then echo2 "CANT FIND: $file" && return 1; fi
+    shift 1;
+    if ! java -Xmx${dalvik_memory,,} -Djava.io.tmpdir=. -jar "$file" "$@" 2>/dev/null; then
+       if $dalvik_logging; then
+          java -Xmx${dalvik_memory,,} -verbose -Djava.io.tmpdir=. -jar "$file" "$@"
+       else
+          java -Xmx${dalvik_memory,,} -Djava.io.tmpdir=. -jar "$file" "$@"
+       fi
+    fi
+}
+
+run_jar_class() {
+    local java file main
+    [ -z "$dalvik_logging" ] && local dalvik_logging=false
+    [ -z "$dalvik_memory" ] && local dalvik_memory=800m
+    if ! command -v java >/dev/null 2>&1; then
+       echo2 "--------JAVA LOGGING--------"
+       echo2 "Unable to find java!"
+       echo2 "----------------------------"
+       echo2 "CANT LOAD JAVA" && return 1
+    fi
+    file="$1"
+    main="$2"
+    if [ ! -f "$file" ]; then echo2 "CANT FIND: $file" && return 1; fi
+    if [ -z "$main" ]; then
+       echo2 "Class undefined: $file " && return 1
+    fi
+    shift 2;
+    if ! java -Xmx${dalvik_memory,,} -Djava.io.tmpdir=. -cp "$file" $main "$@" 2>/dev/null; then
+       if $dalvik_logging; then
+          java -Xmx${dalvik_memory,,} -verbose -Djava.io.tmpdir=. -cp "$file" $main "$@"
+       else
+          java -Xmx${dalvik_memory,,} -Djava.io.tmpdir=. -cp "$file" $main "$@"
+       fi
+    fi
+}
+
+remove_tmp() { [ -d "$TMP" ] && rm -rf "$TMP" 2>/dev/null ; }
+
+readonly -f ui_print echo2 zip_list zip_list_dir zip_list_file auto_mount_partitions wipe getarch remove_tmp run_jar run_jar_class 

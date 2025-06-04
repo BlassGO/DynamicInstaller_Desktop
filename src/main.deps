@@ -1,0 +1,41 @@
+apt {
+    cmd = "apt install -y"
+    path = "/usr/bin:/usr/local/bin"
+    java {
+        name = "openjdk-11-jdk"
+        path += "/usr/lib/jvm:/usr/lib64/jvm"
+        needed = true
+    }
+    zipalign {
+        name = "android-sdk"
+        path += "/usr/lib/android-sdk"
+        needed = true
+    }
+    aapt {
+        name = "android-sdk"
+        path += "/usr/lib/android-sdk"
+        needed = true
+    }
+}
+
+brew {
+    cmd = "brew install"
+    path = "/usr/bin:/usr/local/bin:$BREW_PREFIX/Cellar"
+    java {
+        name = "openjdk@11"
+        path += "/Library/Java/JavaVirtualMachines"
+        needed = true
+    }
+    zipalign {
+        name = "android-sdk"
+        cmd += "--cask"
+        path += "/Library/Android/sdk:/usr/local/Caskroom/android-sdk:~/Library/Android/sdk"
+        needed = true
+    }
+    aapt {
+        name = "android-sdk"
+        cmd += "--cask"
+        path += "/Library/Android/sdk:/usr/local/Caskroom/android-sdk:~/Library/Android/sdk"
+        needed = true
+    }
+}

@@ -1,0 +1,64 @@
+apt {
+    cmd = "apt install -y"
+    path = "/usr/bin:/usr/local/bin"
+    mkdir {
+        name = "coreutils"
+        needed = true
+    }
+    chmod {
+        name = "coreutils"
+        needed = true
+    }
+    cp {
+        name = "coreutils"
+        needed = true
+    }
+    bash {
+        name = "bash"
+        needed = true
+    }
+    rm {
+        name = "coreutils"
+        needed = false
+    }
+    zip {
+        name = "zip"
+        needed = false
+    }
+    xxd {
+        name = "xxd"
+        needed = false
+    }
+}
+brew {
+    cmd = "brew install"
+    path = "/usr/bin:/usr/local/bin:$BREW_PREFIX/Cellar"
+    mkdir {
+        name = "coreutils"
+        needed = true
+    }
+    chmod {
+        name = "coreutils"
+        needed = true
+    }
+    cp {
+        name = "coreutils"
+        needed = true
+    }
+    bash {
+        name = "bash"
+        needed = true
+    }
+    rm {
+        name = "coreutils"
+        needed = false
+    }
+    zip {
+        name = "zip"
+        needed = false
+    }
+    xxd {
+        name = "xxd"
+        needed = false
+    }
+}

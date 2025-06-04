@@ -1,0 +1,5 @@
+# Here you can import additional scripts or set up environment variables.
+# All specified paths are relative to the location of 'run.sh' script.
+
+# Importing the main script
+. ./src/main/main.sh

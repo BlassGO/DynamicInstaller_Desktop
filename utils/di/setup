@@ -1,0 +1,180 @@
+#!/bin/bash
+#Dynamic Installer by @BlassGO - SETUP for Ubuntu/Linux and MacOS
+
+#Basic functions
+echo2() { 
+    case $1 in
+        info)  shift; printf "\033[32m[INFO]\033[0m %s\n" "$*" >&2;  tolog "[INFO] $*" ;;
+        warn)  shift; printf "\033[33m[WARN]\033[0m %s\n" "$*" >&2;  tolog "[WARN] $*" ;;
+        error) shift; printf "\033[31m[ERROR]\033[0m %s\n" "$*" >&2; tolog "[ERROR] $*" ;;
+        *)     printf "%s\n" "$*" >&2; tolog "$*" ;;
+    esac
+}
+true() { return 0; }
+false() { return 1; }
+ui_print() { for __ in "$@"; do echo "$__"; tolog "$__"; done; }
+abort() { echo2 error "$@"; exit 1; }
+testrw() { for __ in "$@"; do { [ -d "$__" ] && echo > "$__/.rw$$" && rm -f "$__/.rw$$"; } || { echo2 error "Read-Only: $__"; return 1; }; done; }
+ensure_dir() { for __ in "$@"; do rm -rf "$__" 2>/dev/null; mkdir -p "$__" || abort "Cant create folder $__"; done; }
+is_substring() { case $2 in *"$1"*) return 0 ;; *) return 1 ;; esac; }
+tolog() { echo "$@" >> "$___LOGFILE" ; }
+
+#Advanced functions
+bb_support() {
+  $___BUSYBOX || return 1
+  $bb_set || { bb_set=true; [ -n "$bb" ] && bb_list="$n$("$bb" --list)$n"; }
+  case $bb_list in *"$n$1$n"*) return 0 ;; *) return 1 ;; esac;
+}
+setup_bb() {
+  "$bb" true || abort "1: BusyBox cannot load on this system!"
+  "$bb" --install -s "$l" || {
+    for i in $("$bb" --list); do
+      ln -sf "$bb" "$l/$i" || "$bb" ln -sf "$bb" "$l/$i" || "$bb" ln -f "$bb" "$l/$i" || {
+        echo "#!$bb" > "$l/$i" && chmod 755 "$l/$i" || abort "2: Failed to setup BusyBox"
+      }
+    done
+  }
+  [ -f "$l/sh" ] || abort "3: Failed to setup BusyBox"
+}
+
+#Initial vars
+BOOTMODE=true
+project="$___WORKDIR"
+main="$___WORKDIR/src/main"
+addons="$___WORKDIR/src/addons"
+deps="$___WORKDIR/utils/default.deps"
+main_deps="$___WORKDIR/src/main.deps"
+#failed_deps="$___WORKDIR/utils/temp/failed_deps"
+load_deps="$___WORKDIR/utils/di/load-deps"
+___LOGFILE="$___WORKDIR/utils/log/di.log"
+___DEPS="$___WORKDIR/utils/temp/parsed.deps"
+___BREW_PREFIX=$(brew --prefix 2>/dev/null)
+___PKG_MANAGER_TEMP="$___WORKDIR/utils/temp/pkg_manager"
+___BUSYBOX=false
+
+#Start
+umask 022
+mkdir -p "$addons" "$___WORKDIR/utils/log" "$___WORKDIR/utils/temp" || abort "Cannot create work directories"
+echo > "$___LOGFILE" || abort "Cannot create log file: $___LOGFILE"
+echo > "$___DEPS" || abort "Cannot create file: $___DEPS"
+[ -f "$load_deps" ] && . "$load_deps" || abort "Cannot import $load_deps"
+for dep in "$deps" "$main_deps"; do
+   load_deps "$dep" 2>> "$___LOGFILE" || {
+      echo2 error "Failed to parse dependencies from: $dep"
+      abort "Please check the log"
+   }
+done
+bb_set=false; bb=$(command -v busybox); n="
+"
+
+$___BUSYBOX && [ -z "$bb" ] && {
+   install_by_name busybox && bb=$(command -v busybox) || {
+      abort "BusyBox not found. Please install it."
+   }
+}
+
+install_all
+
+ARCH=$(uname -m 2>/dev/null)
+
+#Ensure Temp directory
+for TMP in /tmp/di-linux; do
+    mkdir -p $TMP 2>/dev/null; testrw $TMP && break || TMP=
+done
+[ -n "$TMP" ] || abort "Failed to create temporary directory"
+
+#ARGS
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -i|-install)
+           [ -n "$2" ] && MYDIR="$2" || MYDIR="$HOME/bin"
+           [ -d "$MYDIR" ] || abort "setup: Cant find dir: $MYDIR"
+           if [ -f core -a -d static ]; then
+              WORK="$MYDIR/DI"
+              ensure_dir "$WORK"
+              cp -rf * -t "$WORK"
+              echo ". \"$WORK/setup\" \"$WORK\"" > "$MYDIR/di"
+              chmod 755 "$MYDIR/di"
+              if [ -x "$MYDIR/di" ]; then
+                 echo -e "\nInstalled: \033[32mSuccess\033[0m\n\nCommand: \033[33mdi\n"
+                 exit
+              else
+                 echo -e "\nInstalled: \033[31mFailed\033[0m\n"
+                 abort
+              fi
+           else
+              abort "setup: CANNOT FIND A VALID ENVIRONMENT " 
+           fi
+           shift 2
+        ;;
+        *)
+          ___MYPATH="$1"
+          shift
+        ;;
+    esac
+done
+
+#Global vars
+export TMPDIR="$TMP" \
+l="$TMP/zbin/ugu" \
+project main addons \
+___LOGFILE ___DEPS ___BREW_PREFIX ___PKG_MANAGER_TEMP PKG_MANAGER \
+TMP BOOTMODE ARCH
+
+#Extra
+rc="$TMP/0000001.tmp"
+rm -rf "$TMP" 2>/dev/null
+
+#Ensure work DIRs
+CURRENT="$PWD"
+ensure_dir "$l"
+[ -d "$___MYPATH" ] && cd "$___MYPATH"
+
+#Test Mode Implementation
+if [ -f core -a -d static ]; then   
+   ui_print " >> Desktop Mode 1.0.0 "
+   ui_print " @BlassGO "
+   ui_print " "
+   [ -d "$___MYPATH" ] && ui_print " -- Working from: $___MYPATH"
+   ui_print " -- Loading environment..."
+   ui_print " "
+   export apktool_aapt=on
+   
+   #Ensure BusyBox Environment
+   $___BUSYBOX && setup_bb
+   export PATH="$l:$PATH"
+   
+   #Verify static folder
+   cp -rf static/* -t "$l" 2>/dev/null
+   for file in apktool.jar axml.jar zipsigner.jar overlay.apk; do
+      [ -f "$l/$file" ] || {
+         echo2 warn "Missing $file"
+      }
+   done
+
+   #Getting version
+   export di_version=$(grep -Eo "[0-9]+\.[0-9]+[-[:alnum:]]*" version.txt 2>/dev/null)
+   
+   #Getting configs
+   cp -f configs/* -t "$l"
+   
+   #Finish
+   chmod -R 755 "$l"
+   
+   echo '
+   shopt -s checkwinsize
+   export HISTFILE="'$TMP'/zbin/bash_history"
+   {
+      . ./di-for-linux
+      . ./core
+      . ./load-deps
+      [ -d "'"$CURRENT"'" ] && cd "'"$CURRENT"'"
+   } >> "'$___LOGFILE'" 2>&1
+   [ -f di-env ] && . ./di-env
+   rm -f "'$rc'"
+   ' > "$rc"
+   [ ! -f "$rc" ] && abort "setup: Invalid $rc"
+   bash --rcfile "$rc"
+else
+   abort "setup: CANNOT FIND A VALID ENVIRONMENT "
+fi
