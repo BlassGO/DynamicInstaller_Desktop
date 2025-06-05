@@ -59,7 +59,7 @@ manager-name {
         property = value
         ...
     }
-s}
+}
 ```
 
 #### Properties
