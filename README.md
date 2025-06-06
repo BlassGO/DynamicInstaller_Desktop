@@ -10,7 +10,8 @@ DynamicInstaller_Desktop/
 │   ├── addons/             # Optional plugins
 │   ├── main/
 │   │   └── main.sh         # Main execution script
-│   └── main.deps           # Project-specific dependency definitions
+│   └── main.deps           # Defines project-specific dependencies
+│   └── static.deps         # Defines project-specific static dependencies
 ├── utils/
 │   ├── di/                 # Dynamic Installer Core
 │   ├── log/                # Logs for DI setup process
