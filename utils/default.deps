@@ -1,6 +1,10 @@
 apt {
     cmd = "apt install -y"
     path = "/usr/bin:/usr/local/bin"
+    bash {
+        name = "bash"
+        needed = true
+    }
     mkdir {
         name = "coreutils"
         needed = true
@@ -13,8 +17,8 @@ apt {
         name = "coreutils"
         needed = true
     }
-    bash {
-        name = "bash"
+    sha256sum {
+        name = "coreutils"
         needed = true
     }
     rm {
@@ -33,6 +37,10 @@ apt {
 brew {
     cmd = "brew install"
     path = "/usr/bin:/usr/local/bin:$BREW_PREFIX/Cellar"
+    bash {
+        name = "bash"
+        needed = true
+    }
     mkdir {
         name = "coreutils"
         needed = true
@@ -43,10 +51,6 @@ brew {
     }
     cp {
         name = "coreutils"
-        needed = true
-    }
-    bash {
-        name = "bash"
         needed = true
     }
     rm {
